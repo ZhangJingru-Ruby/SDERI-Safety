@@ -1,6 +1,9 @@
 # Local agent instructions. Keep this file local and never push it.
 agent.md
 
+# Local reference papers/notes. Keep these local and never push them.
+Related Papers/
+
 # Python caches
 __pycache__/
 *.py[cod]
