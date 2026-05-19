@@ -1,0 +1,70 @@
+<launch>
+  <arg name="scenario_file" default="small_warehouse_obs10_v0.2.json"/>
+
+  <param name="/sderi/scenario_file"
+       value="$(find simulator_setup)/scenarios/$(arg scenario_file)"/>
+
+  <arg name="check_period" default="0.2"/>
+  <arg name="dist_thresh" default="0.4"/>
+  <arg name="time_thresh" default="1.0"/>
+  <arg name="override_sub_dur" default="0.5"/>
+  <arg name="pipeline_timeout" default="30.0"/>
+
+  <arg name="t_min" default="0.45"/>
+  <arg name="t_max" default="0.95"/>
+  <arg name="gamma" default="2.0"/>
+  <arg name="control_dt" default="0.05"/>
+
+  <arg name="rho_gain" default="0.0"/>
+  <arg name="rho_deadband" default="0.20"/>
+
+  <node pkg="zjr_planner"
+        type="save_pointcloud_service"
+        name="pointcloud_generate_once"
+        output="screen"
+        respawn="false" />
+
+  <node pkg="zjr_planner"
+        type="rrt_multi_paths_srv"
+        name="rrt_multi_paths_srv"
+        output="screen"
+        respawn="false" />
+
+  <node pkg="zjr_planner"
+        type="main.py"
+        name="$(anon sderi_monitor)"
+        output="screen"
+        respawn="false">
+
+    <param name="check_period" value="$(arg check_period)"/>
+    <param name="dist_thresh" value="$(arg dist_thresh)"/>
+    <param name="time_thresh" value="$(arg time_thresh)"/>
+    <param name="override_sub_dur" value="$(arg override_sub_dur)"/>
+    <param name="pipeline_timeout" value="$(arg pipeline_timeout)"/>
+
+    <param name="t_min" value="$(arg t_min)"/>
+    <param name="t_max" value="$(arg t_max)"/>
+    <param name="gamma" value="$(arg gamma)"/>
+    <param name="control_dt" value="$(arg control_dt)"/>
+
+    <env name="SDERI_RHO_GAIN" value="$(arg rho_gain)"/>
+    <env name="SDERI_RHO_DEADBAND" value="$(arg rho_deadband)"/>
+
+    <param name="scenario_file"
+           value="$(find simulator_setup)/scenarios/$(arg scenario_file)"/>
+  </node>
+
+  <arg name="enable_decision_logger" default="true"/>
+  <arg name="decision_debug_csv"
+      default="$(env HOME)/catkin_arena/sderi_decision_debug.csv"/>
+
+  <group if="$(arg enable_decision_logger)">
+    <node pkg="zjr_planner"
+          type="sderi_decision_debug_logger.py"
+          name="sderi_decision_debug_logger"
+          output="screen"
+          respawn="false"
+          args="--out $(arg decision_debug_csv)" />
+  </group>
+
+</launch>

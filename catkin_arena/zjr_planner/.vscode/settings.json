@@ -1,0 +1,14 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/robot/catkin_arena/src/arena-rosnav-3D",
+        "/home/robot/catkin_arena/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/home/robot/arena_ws/src/arena-rosnav"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/robot/catkin_arena/src/arena-rosnav-3D",
+        "/home/robot/catkin_arena/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/home/robot/arena_ws/src/arena-rosnav"
+    ]
+}

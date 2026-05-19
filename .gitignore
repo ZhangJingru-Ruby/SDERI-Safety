@@ -1,0 +1,17 @@
+# Local agent instructions. Keep this file local and never push it.
+agent.md
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Local ROS/catkin build outputs
+build/
+devel/
+install/
+logs/
+log/
+
+# Local OS/editor files
+.DS_Store
+*.swp

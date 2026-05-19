@@ -1,0 +1,5 @@
+# Terminal 1
+roslaunch arena_bringup start_arena_gazebo.launch local_planner:=rosnav world:=small_warehouse task_mode:=scenario scenario_file:=small_warehouse_obs10_v0.2.json record_data:=true
+
+# Terminal 2
+roslaunch zjr_planner action_server.launch scenario_file:=small_warehouse_obs10_v0.2.json

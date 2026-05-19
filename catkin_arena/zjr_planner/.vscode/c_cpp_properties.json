@@ -1,0 +1,49 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/robot/catkin_arena/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/all_in_one_global_planner_interface/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/arena_local_planer/model_based/all_in_one_local_planner_interface/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/arena_fake_localization/include/**",
+        "/home/robot/catkin_arena/src/arena_global_planner_astar/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/arena_intermediate_planner/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/arena_mapping/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/arena_path_search/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/arena_plan_manager/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/arena_spacial_horizon/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/arena_traj_planner/include/**",
+        "/home/robot/catkin_arena/src/dragon/include/**",
+        "/home/robot/catkin_arena/src/forks/robots/cob4_packages/cob_base_controller_utils/include/**",
+        "/home/robot/catkin_arena/src/forks/robots/cob4_packages/cob_omni_drive_controller/include/**",
+        "/home/robot/catkin_arena/src/forks/robots/cob4_packages/cob_scan_unifier/include/**",
+        "/home/robot/catkin_arena/src/costmap_converter/include/**",
+        "/home/robot/catkin_arena/src/forks/navigation/msgs/ford/include/**",
+        "/home/robot/catkin_arena/src/forks/gazebo_ros_2Dmap_plugin/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/arena_navigation/arena_local_planer/learning_based/all_in_one_3rd_party/light_scan_sim/include/**",
+        "/home/robot/catkin_arena/src/forks/navigation/local_planner/mpc/mpc_local_planner/include/**",
+        "/home/robot/catkin_arena/src/forks/pedsim_ros/3rdparty/libpedsim/include/**",
+        "/home/robot/catkin_arena/src/forks/pedsim_ros/pedsim_sensors/include/**",
+        "/home/robot/catkin_arena/src/forks/pedsim_ros/pedsim_simulator/include/**",
+        "/home/robot/catkin_arena/src/forks/pedsim_ros/pedsim_utils/include/**",
+        "/home/robot/catkin_arena/src/forks/pedsim_ros/pedsim_visualizer/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/utils/plan_visualization/include/**",
+        "/home/robot/catkin_arena/src/pointgrey_camera_driver/pointgrey_camera_driver/include/**",
+        "/home/robot/catkin_arena/src/arena-rosnav-3D/simulator_setup/include/**",
+        "/home/robot/catkin_arena/src/forks/navigation/local_planner/teb/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
