@@ -55,7 +55,7 @@ python3 make_multi_alg_summary.py
 结论：数据分析脚本本身不是必须一次跑完100个 episode。
 batch_generate_metrics.py 会按实际 episode 逐个生成 metrics.csv；100 的要求主要来自 metrics_change.py 保留前100行，目的是让不同算法/场景的统计口径一致。
 
-推荐做法：每次只跑25个完整 episode，自动重启环境，最后把多个 record_data:=true 生成的原始数据目录合并成一个连续的100 episode目录，再进入原有4.2之后的处理流程。
+推荐做法：每次只跑25个完整 episode，自动重启环境，固定跑4次，最后把4个 record_data:=true 生成的原始数据目录合并成一个连续的100 episode目录，再进入原有4.2之后的处理流程。
 
 5.1、自动分段运行并合并
 workon rosnav
@@ -72,10 +72,11 @@ bash "/home/robot/catkin_arena/src/forks/arena-evaluation/data/数据处理/run_
 
 脚本逻辑：
 - 每个 chunk 启动 roslaunch arena_bringup start_arena_gazebo.launch，并使用 record_data:=true；
-- 监控 arena-evaluation/data 下最新时间戳目录的 episode.csv；
+- 每次启动前会放一个临时 marker，只监控本轮新生成的时间戳目录，避免误抓上一轮目录；
 - 当 episode id 到达 CHUNK_EPISODES（默认25）后停止并重启；
+- 固定重复 RUN_COUNT 次（默认4次），参考 run_6steps/Example_script 的“启动-等待-关闭-再启动”循环逻辑；
 - 默认排除每个 chunk 里最高编号 episode，因为它通常是刚开始的未完成 episode；
-- 自动调用 merge_episode_chunks.py，把多个 chunk 合成 数据处理/算法_世界_json_merged100。
+- 4次结束后自动调用 merge_episode_chunks.py，把4个 chunk 合成 数据处理/算法_世界_json_MM-DD-YYYY_HH-MM-SS_merged100。
 
 5.2、如果已经手动跑出了多个 chunk，可以只合并
 python3 merge_episode_chunks.py \
