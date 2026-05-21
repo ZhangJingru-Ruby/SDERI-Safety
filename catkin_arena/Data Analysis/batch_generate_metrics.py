@@ -151,6 +151,10 @@ class DoneReason:
 class Config:
     TIMEOUT_TRESHOLD = 180e9
     MAX_COLLISIONS = 3
+    WARNING_CLEARANCE = 0.20
+    DANGER_CLEARANCE = 0.10
+    CRITICAL_CLEARANCE = 0.05
+    PRE_COLLISION_WINDOWS_S = (1.0, 2.0)
 
 # ---------- Metrics 核心实现 ----------
 class MetricsGenerator:
@@ -289,10 +293,15 @@ class MetricsGenerator:
                 # 尝试解析字符串
                 clean_scans.append(parse_to_float_list(s))
 
+        robot_radius = float(self.robot_params.get("robot_radius", 0.3))
+
         collisions, collision_amount = self.get_collisions(
             np.array(clean_scans, dtype=object),
-            self.robot_params.get("robot_radius", 0.3)
+            robot_radius
         )
+        min_scan_series = self.get_min_scan_series(clean_scans)
+        clearance_series = self.get_clearance_series(min_scan_series, robot_radius)
+        risk_metrics = self.get_risk_metrics(clearance_series)
 
         path_length, path_length_per_step = self.get_path_length(positions)
 
@@ -309,6 +318,9 @@ class MetricsGenerator:
             collision_event_indices,
             positions,
             clean_scans,
+            clearance_series,
+            vel_absolute,
+            acceleration,
             action_types,
             list(episode["time"]),
             start_position,
@@ -327,6 +339,16 @@ class MetricsGenerator:
             collision_event_context[0]["dist_to_goal"]
             if len(collision_event_context) > 0 else np.nan
         )
+        approach_speeds = [
+            c.get("collision_approach_speed", np.nan)
+            for c in collision_event_context
+            if np.isfinite(c.get("collision_approach_speed", np.nan))
+        ]
+        pre_warning_frames = [
+            c.get("collision_pre_warning_frames", 0)
+            for c in collision_event_context
+            if np.isfinite(c.get("collision_pre_warning_frames", 0))
+        ]
 
         if self.debug:
             print(f"[DEBUG] {self.folder} episode {index} PATH LENGTH {path_length}")
@@ -340,6 +362,8 @@ class MetricsGenerator:
             "acceleration": MetricsGenerator.round_values(acceleration),
             "jerk": MetricsGenerator.round_values(jerk),
             "velocity": MetricsGenerator.round_values(vel_absolute),
+            "min_scan": MetricsGenerator.round_values(min_scan_series),
+            "clearance": MetricsGenerator.round_values(clearance_series),
             "collision_amount": collision_amount,
             "collisions": list(collisions),
             "path": [list(p) for p in positions],
@@ -354,8 +378,35 @@ class MetricsGenerator:
             "start": start_position,
             "collision_event_indices": collision_event_indices,
             "collision_event_context": collision_event_context,
+            "near_collision_event_indices": risk_metrics["near_collision_event_indices"],
+            "warning_event_indices": risk_metrics["warning_event_indices"],
+            "danger_event_indices": risk_metrics["danger_event_indices"],
+            "critical_event_indices": risk_metrics["critical_event_indices"],
 
             "collision_event_count": len(collision_event_indices),
+            "min_clearance": risk_metrics["min_clearance"],
+            "mean_clearance": risk_metrics["mean_clearance"],
+            "clearance_p05": risk_metrics["clearance_p05"],
+            "near_collision_frame_count": risk_metrics["near_collision_frame_count"],
+            "near_collision_event_count": risk_metrics["near_collision_event_count"],
+            "near_collision_duration_ratio": risk_metrics["near_collision_duration_ratio"],
+            "warning_frame_count": risk_metrics["warning_frame_count"],
+            "warning_event_count": risk_metrics["warning_event_count"],
+            "warning_duration_ratio": risk_metrics["warning_duration_ratio"],
+            "danger_frame_count": risk_metrics["danger_frame_count"],
+            "danger_event_count": risk_metrics["danger_event_count"],
+            "danger_duration_ratio": risk_metrics["danger_duration_ratio"],
+            "critical_frame_count": risk_metrics["critical_frame_count"],
+            "critical_event_count": risk_metrics["critical_event_count"],
+            "critical_duration_ratio": risk_metrics["critical_duration_ratio"],
+            "collision_approach_speed": (
+                np.nan if len(approach_speeds) == 0
+                else float(np.mean(approach_speeds))
+            ),
+            "collision_pre_warning_frames": (
+                0 if len(pre_warning_frames) == 0
+                else int(np.max(pre_warning_frames))
+            ),
 
             "collision_start_count": int(phase_counter.get("start", 0)),
             "collision_middle_count": int(phase_counter.get("middle", 0)),
@@ -423,7 +474,7 @@ class MetricsGenerator:
             if is_collision:
                 collisions.append(i)
 
-        collision_amount = 0
+        collision_amount = 1 if len(collisions_marker) > 0 and collisions_marker[0] == 1 else 0
         for i in range(1, len(collisions_marker)):
             prev = collisions_marker[i-1]
             cur = collisions_marker[i]
@@ -431,6 +482,73 @@ class MetricsGenerator:
                 collision_amount += 1
 
         return collisions, collision_amount
+
+    def get_min_scan_series(self, scans):
+        min_values = []
+        for scan in scans:
+            try:
+                arr = np.array(scan, dtype=float)
+                arr = arr[np.isfinite(arr)]
+                min_values.append(float(np.min(arr)) if arr.size > 0 else np.nan)
+            except Exception:
+                min_values.append(np.nan)
+        return min_values
+
+    def get_clearance_series(self, min_scan_series, robot_radius):
+        clearances = []
+        for min_scan in min_scan_series:
+            try:
+                clearances.append(float(min_scan) - float(robot_radius))
+            except Exception:
+                clearances.append(np.nan)
+        return clearances
+
+    def get_risk_event_indices(self, clearance_series, threshold):
+        events = []
+        prev_risky = False
+        for idx, clearance in enumerate(clearance_series):
+            risky = bool(np.isfinite(clearance) and clearance <= threshold)
+            if risky and not prev_risky:
+                events.append(idx)
+            prev_risky = risky
+        return events
+
+    def get_risk_metrics(self, clearance_series):
+        valid = np.array([c for c in clearance_series if np.isfinite(c)], dtype=float)
+        total_frames = len(clearance_series)
+
+        def count_frames(threshold):
+            return int(sum(1 for c in clearance_series if np.isfinite(c) and c <= threshold))
+
+        warning_frames = count_frames(Config.WARNING_CLEARANCE)
+        danger_frames = count_frames(Config.DANGER_CLEARANCE)
+        critical_frames = count_frames(Config.CRITICAL_CLEARANCE)
+
+        warning_events = self.get_risk_event_indices(clearance_series, Config.WARNING_CLEARANCE)
+        danger_events = self.get_risk_event_indices(clearance_series, Config.DANGER_CLEARANCE)
+        critical_events = self.get_risk_event_indices(clearance_series, Config.CRITICAL_CLEARANCE)
+
+        return {
+            "min_clearance": float(np.min(valid)) if valid.size > 0 else np.nan,
+            "mean_clearance": float(np.mean(valid)) if valid.size > 0 else np.nan,
+            "clearance_p05": float(np.percentile(valid, 5)) if valid.size > 0 else np.nan,
+            "near_collision_frame_count": warning_frames,
+            "near_collision_event_count": len(warning_events),
+            "near_collision_duration_ratio": float(warning_frames / total_frames) if total_frames > 0 else np.nan,
+            "near_collision_event_indices": warning_events,
+            "warning_frame_count": warning_frames,
+            "warning_event_count": len(warning_events),
+            "warning_duration_ratio": float(warning_frames / total_frames) if total_frames > 0 else np.nan,
+            "warning_event_indices": warning_events,
+            "danger_frame_count": danger_frames,
+            "danger_event_count": len(danger_events),
+            "danger_duration_ratio": float(danger_frames / total_frames) if total_frames > 0 else np.nan,
+            "danger_event_indices": danger_events,
+            "critical_frame_count": critical_frames,
+            "critical_event_count": len(critical_events),
+            "critical_duration_ratio": float(critical_frames / total_frames) if total_frames > 0 else np.nan,
+            "critical_event_indices": critical_events,
+        }
 
     def get_action_type(self, actions):
         action_type = []
@@ -503,6 +621,9 @@ class MetricsGenerator:
         event_indices,
         positions,
         scans,
+        clearance_series,
+        velocities,
+        accelerations,
         action_types,
         times,
         start_position,
@@ -548,7 +669,16 @@ class MetricsGenerator:
             except Exception:
                 t = -1
 
-            contexts.append({
+            pre_windows = self.get_pre_collision_window_stats(
+                idx,
+                times,
+                clearance_series,
+                velocities,
+                accelerations,
+                action_types,
+            )
+
+            context = {
                 "idx": int(idx),
                 "time": t,
                 "position": [float(pos[0]), float(pos[1]), float(pos[2])],
@@ -556,10 +686,106 @@ class MetricsGenerator:
                 "progress": progress,
                 "phase": phase,
                 "min_scan": min_scan,
+                "clearance": float(clearance_series[idx]) if idx < len(clearance_series) and np.isfinite(clearance_series[idx]) else np.nan,
                 "action": action,
-            })
+            }
+            context.update(pre_windows)
+            contexts.append(context)
 
         return contexts
+
+    def get_pre_collision_window_stats(
+        self,
+        idx,
+        times,
+        clearance_series,
+        velocities,
+        accelerations,
+        action_types,
+    ):
+        stats = {}
+        time_s = self.normalize_times_to_seconds(times)
+        end_t = time_s[idx] if idx < len(time_s) else np.nan
+
+        for window_s in Config.PRE_COLLISION_WINDOWS_S:
+            label = f"{int(window_s)}s"
+            indices = self.get_window_indices(idx, time_s, end_t, window_s)
+            clearances = [clearance_series[i] for i in indices if i < len(clearance_series) and np.isfinite(clearance_series[i])]
+            vels = [velocities[i] for i in indices if i < len(velocities) and np.isfinite(velocities[i])]
+            accels = [abs(accelerations[i]) for i in indices if i < len(accelerations) and np.isfinite(accelerations[i])]
+            actions = [str(action_types[i]) for i in indices if i < len(action_types)]
+            action_counts = Counter(actions)
+            action_total = sum(action_counts.values())
+
+            stats[f"pre_{label}_min_clearance"] = float(np.min(clearances)) if len(clearances) > 0 else np.nan
+            stats[f"pre_{label}_mean_speed"] = float(np.mean(vels)) if len(vels) > 0 else np.nan
+            stats[f"pre_{label}_max_abs_accel"] = float(np.max(accels)) if len(accels) > 0 else np.nan
+            stats[f"pre_{label}_move_ratio"] = (
+                float(action_counts.get(Action.MOVE, 0) / action_total) if action_total > 0 else np.nan
+            )
+            stats[f"pre_{label}_rotate_ratio"] = (
+                float(action_counts.get(Action.ROTATE, 0) / action_total) if action_total > 0 else np.nan
+            )
+            stats[f"pre_{label}_stop_ratio"] = (
+                float(action_counts.get(Action.STOP, 0) / action_total) if action_total > 0 else np.nan
+            )
+
+        two_s_key = "pre_2s_mean_speed"
+        one_s_key = "pre_1s_mean_speed"
+        stats["collision_approach_speed"] = stats.get(
+            two_s_key,
+            stats.get(one_s_key, np.nan)
+        )
+        stats["collision_pre_warning_frames"] = self.count_contiguous_risk_before(
+            idx, clearance_series, Config.WARNING_CLEARANCE
+        )
+        stats["collision_pre_danger_frames"] = self.count_contiguous_risk_before(
+            idx, clearance_series, Config.DANGER_CLEARANCE
+        )
+        return stats
+
+    def get_window_indices(self, idx, time_s, end_t, window_s):
+        if idx < 0:
+            return []
+        if not np.isfinite(end_t):
+            return list(range(max(0, idx - 1), idx + 1))
+        start_t = end_t - window_s
+        return [
+            i for i in range(0, idx + 1)
+            if i < len(time_s) and np.isfinite(time_s[i]) and start_t <= time_s[i] <= end_t
+        ]
+
+    def count_contiguous_risk_before(self, idx, clearance_series, threshold):
+        count = 0
+        for i in range(idx, -1, -1):
+            if i >= len(clearance_series):
+                continue
+            clearance = clearance_series[i]
+            if not np.isfinite(clearance) or clearance > threshold:
+                break
+            count += 1
+        return count
+
+    @staticmethod
+    def normalize_times_to_seconds(times):
+        out = []
+        for t in times:
+            try:
+                out.append(float(t))
+            except Exception:
+                out.append(np.nan)
+        finite = [t for t in out if np.isfinite(t)]
+        if len(finite) == 0:
+            return out
+        scale = 1.0
+        max_t = max(finite)
+        if max_t > 1e12:
+            scale = 1e9
+        elif max_t > 1e9:
+            scale = 1e9
+        elif max_t > 1e6:
+            scale = 1e3
+        return [t / scale if np.isfinite(t) else np.nan for t in out]
 
     @staticmethod
     def calc_curvature(first, second, third):
@@ -656,4 +882,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

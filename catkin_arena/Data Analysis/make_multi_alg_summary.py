@@ -25,7 +25,34 @@ LIST_COLS = [
 
     "collision_event_indices",
     "collision_event_context",
+    "min_scan",
+    "clearance",
+    "near_collision_event_indices",
+    "warning_event_indices",
+    "danger_event_indices",
+    "critical_event_indices",
 ]
+
+SAFETY_SUMMARY_COLS = {
+    "min_clearance",
+    "mean_clearance",
+    "clearance_p05",
+    "near_collision_frame_count",
+    "near_collision_event_count",
+    "near_collision_duration_ratio",
+    "warning_frame_count",
+    "warning_event_count",
+    "warning_duration_ratio",
+    "danger_frame_count",
+    "danger_event_count",
+    "danger_duration_ratio",
+    "critical_frame_count",
+    "critical_event_count",
+    "critical_duration_ratio",
+    "collision_event_count",
+    "collision_approach_speed",
+    "collision_pre_warning_frames",
+}
 
 def parse_list_cell(cell):
     """把 CSV 中看起来像列表的单元格解析为 Python list（鲁棒）"""
@@ -132,6 +159,17 @@ def g(row, col):
         return parse_list_cell(v)
     return [v]
 
+def scalar_float(row, col, default=np.nan):
+    if col not in row:
+        return default
+    try:
+        val = row.get(col, default)
+        if pd.isna(val):
+            return default
+        return float(val)
+    except Exception:
+        return default
+
 def process_metrics_df(df):
     """
     输入：pandas DataFrame（metrics.csv 已经用 converters 解析列表列）
@@ -177,7 +215,25 @@ def process_metrics_df(df):
             "roughness_mean": np.nan if len(roughness)==0 else float(np.mean(roughness)),
             "collision_amount": (int(row.get("collision_amount")) if (str(row.get("collision_amount", "")).isdigit()) else (len(collisions) if len(collisions)>0 else 0)),
             "success": success,
-            "path_point_count": len(g(row, "path"))
+            "path_point_count": len(g(row, "path")),
+            "min_clearance": scalar_float(row, "min_clearance"),
+            "mean_clearance": scalar_float(row, "mean_clearance"),
+            "clearance_p05": scalar_float(row, "clearance_p05"),
+            "near_collision_frame_count": scalar_float(row, "near_collision_frame_count", 0.0),
+            "near_collision_event_count": scalar_float(row, "near_collision_event_count", 0.0),
+            "near_collision_duration_ratio": scalar_float(row, "near_collision_duration_ratio"),
+            "warning_frame_count": scalar_float(row, "warning_frame_count", 0.0),
+            "warning_event_count": scalar_float(row, "warning_event_count", 0.0),
+            "warning_duration_ratio": scalar_float(row, "warning_duration_ratio"),
+            "danger_frame_count": scalar_float(row, "danger_frame_count", 0.0),
+            "danger_event_count": scalar_float(row, "danger_event_count", 0.0),
+            "danger_duration_ratio": scalar_float(row, "danger_duration_ratio"),
+            "critical_frame_count": scalar_float(row, "critical_frame_count", 0.0),
+            "critical_event_count": scalar_float(row, "critical_event_count", 0.0),
+            "critical_duration_ratio": scalar_float(row, "critical_duration_ratio"),
+            "collision_event_count": scalar_float(row, "collision_event_count", 0.0),
+            "collision_approach_speed": scalar_float(row, "collision_approach_speed"),
+            "collision_pre_warning_frames": scalar_float(row, "collision_pre_warning_frames", 0.0),
         }
 
         mlin, mang = cmd_stats_episode(cmd_vel)
@@ -206,7 +262,10 @@ def process_metrics_df(df):
             result_dict[c + "_mean"] = np.nan
             result_dict[c + "_std"] = np.nan
 
-    one_row = {k: v for k,v in result_dict.items() if k.endswith("_mean")}
+    one_row = {
+        k: v for k, v in result_dict.items()
+        if k.endswith("_mean") or k[:-4] in SAFETY_SUMMARY_COLS
+    }
     return one_row
 
 def infer_name_from_path(p):
@@ -282,4 +341,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
