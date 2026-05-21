@@ -70,8 +70,16 @@ WORLD=small_warehouse \
 SCENARIO_FILE=small_warehouse_obs10_v0.2.json \
 bash "/home/robot/catkin_arena/src/forks/arena-evaluation/data/数据处理/run_100_episodes_chunked.sh"
 
+# 如果该算法需要 zjr_planner/action_server.launch（如 subgoal、rrt_supply），开启 ENABLE_ZJR：
+PLANNER=rosnav \
+WORLD=small_warehouse \
+SCENARIO_FILE=small_warehouse_obs10_v0.2.json \
+ENABLE_ZJR=true \
+bash "/home/robot/catkin_arena/src/forks/arena-evaluation/data/数据处理/run_100_episodes_chunked.sh"
+
 脚本逻辑：
 - 每个 chunk 启动 roslaunch arena_bringup start_arena_gazebo.launch，并使用 record_data:=true；
+- 如果 ENABLE_ZJR=true，每个 chunk 会在 arena 启动后再启动 roslaunch zjr_planner action_server.launch scenario_file:=同一个json；
 - 每次启动前会放一个临时 marker，只监控本轮新生成的时间戳目录，避免误抓上一轮目录；
 - 当 episode id 到达 CHUNK_EPISODES（默认25）后停止并重启；
 - 固定重复 RUN_COUNT 次（默认4次），参考 run_6steps/Example_script 的“启动-等待-关闭-再启动”循环逻辑；

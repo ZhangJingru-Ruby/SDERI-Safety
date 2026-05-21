@@ -19,6 +19,9 @@ CATKIN_SETUP="${CATKIN_SETUP:-$HOME/catkin_arena/devel/setup.bash}"
 DATA_ROOT="${DATA_ROOT:-}"
 PROCESS_ROOT="${PROCESS_ROOT:-}"
 OUTPUT_NAME="${OUTPUT_NAME:-}"
+ENABLE_ZJR="${ENABLE_ZJR:-false}"
+ZJR_LAUNCH_DELAY="${ZJR_LAUNCH_DELAY:-20}"
+ZJR_EXTRA_ARGS="${ZJR_EXTRA_ARGS:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -36,6 +39,9 @@ Environment variables:
   DATA_ROOT         default: rospack find arena-evaluation/data
   PROCESS_ROOT      default: DATA_ROOT/数据处理
   OUTPUT_NAME       default: planner_world_scenario_MM-DD-YYYY_HH-MM-SS_merged100
+  ENABLE_ZJR        default: false. true/1/yes starts zjr_planner action_server.launch for each chunk.
+  ZJR_LAUNCH_DELAY  default: 20. Seconds to wait after arena launch before starting zjr_planner.
+  ZJR_EXTRA_ARGS    default: empty. Extra roslaunch args for zjr_planner, for example 'foo:=bar'.
 USAGE
 }
 
@@ -76,6 +82,7 @@ setup_env() {
 
 kill_arena() {
   echo "[STOP] stopping arena/gazebo/ros processes" >&2
+  pkill -f "roslaunch zjr_planner action_server.launch" || true
   pkill -f "roslaunch arena_bringup start_arena_gazebo.launch" || true
   pkill -f "gazebo" || true
   pkill -f "gzserver" || true
@@ -83,6 +90,13 @@ kill_arena() {
   pkill -f "rosmaster" || true
   pkill -f "roscore" || true
   sleep 8
+}
+
+is_enabled() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|y|on) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 latest_data_dir() {
@@ -207,7 +221,10 @@ wait_for_chunk() {
 
 run_chunk() {
   local chunk_index="$1"
-  local logfile="$LOGDIR/run_${PLANNER}_${WORLD}_${SCENARIO_FILE}_chunk${chunk_index}_$(timestamp).log"
+  local ts
+  ts="$(timestamp)"
+  local arena_logfile="$LOGDIR/run_${PLANNER}_${WORLD}_${SCENARIO_FILE}_chunk${chunk_index}_${ts}_arena.log"
+  local zjr_logfile="$LOGDIR/run_${PLANNER}_${WORLD}_${SCENARIO_FILE}_chunk${chunk_index}_${ts}_zjr.log"
   local marker_file="/tmp/arena_chunk_$$_${chunk_index}.marker"
 
   echo "[START] chunk $chunk_index: $PLANNER $WORLD $SCENARIO_FILE" >&2
@@ -217,17 +234,37 @@ run_chunk() {
     world:="$WORLD" \
     task_mode:=scenario \
     scenario_file:="$SCENARIO_FILE" \
-    record_data:=true > "$logfile" 2>&1 &
+    record_data:=true > "$arena_logfile" 2>&1 &
 
-  local pid="$!"
+  local arena_pid="$!"
   sleep 20
-  if ! kill -0 "$pid" >/dev/null 2>&1; then
-    echo "[ERROR] roslaunch failed. Log: $logfile" >&2
+  if ! kill -0 "$arena_pid" >/dev/null 2>&1; then
+    echo "[ERROR] arena roslaunch failed. Log: $arena_logfile" >&2
     return 1
+  fi
+  echo "[START] arena roslaunch PID=$arena_pid log=$arena_logfile" >&2
+
+  local zjr_pid=""
+  if is_enabled "$ENABLE_ZJR"; then
+    echo "[START] waiting ${ZJR_LAUNCH_DELAY}s before zjr_planner launch" >&2
+    sleep "$ZJR_LAUNCH_DELAY"
+    # shellcheck disable=SC2086
+    roslaunch zjr_planner action_server.launch \
+      scenario_file:="$SCENARIO_FILE" \
+      $ZJR_EXTRA_ARGS > "$zjr_logfile" 2>&1 &
+    zjr_pid="$!"
+    sleep 10
+    if ! kill -0 "$zjr_pid" >/dev/null 2>&1; then
+      echo "[ERROR] zjr_planner roslaunch failed. Log: $zjr_logfile" >&2
+      kill_arena
+      rm -f "$marker_file"
+      return 1
+    fi
+    echo "[START] zjr_planner roslaunch PID=$zjr_pid log=$zjr_logfile" >&2
   fi
 
   local data_dir
-  data_dir="$(wait_for_chunk "$chunk_index" "$pid" "$marker_file" | tail -n 1)"
+  data_dir="$(wait_for_chunk "$chunk_index" "$arena_pid" "$marker_file" | tail -n 1)"
   kill_arena
   rm -f "$marker_file"
 
@@ -255,6 +292,7 @@ main() {
   fi
 
   echo "[CONFIG] planner=$PLANNER world=$WORLD scenario=$SCENARIO_FILE"
+  echo "[CONFIG] enable_zjr=$ENABLE_ZJR zjr_launch_delay=$ZJR_LAUNCH_DELAY zjr_extra_args=$ZJR_EXTRA_ARGS"
   echo "[CONFIG] run_count=$RUN_COUNT target=$TARGET_EPISODES chunk=$CHUNK_EPISODES data=$DATA_ROOT process=$PROCESS_ROOT"
   echo "[CONFIG] merged output=$PROCESS_ROOT/$OUTPUT_NAME"
 
