@@ -49,7 +49,19 @@
   <arg name="scene_file" default="$(find simulator_setup)/scenarios/ped_scenarios/$(arg world).xml"/>
   <arg name="real" default="false"/>
   <arg name="emergency_brake" default="false"/>
+  <arg name="enable_safety_throttle" default="false"/>
   <arg name="timeout" default="3.0"/>
+
+  <arg name="safety_front_angle_deg" default="60"/>
+  <arg name="safety_d_stop" default="0.35"/>
+  <arg name="safety_d_slow" default="0.90"/>
+  <arg name="safety_eri_stop_gain" default="0.20"/>
+  <arg name="safety_eri_slow_gain" default="0.40"/>
+  <arg name="safety_max_linear_scale" default="1.0"/>
+  <arg name="safety_keep_reverse" default="false"/>
+  <arg name="safety_angular_limit" default="0.0"/>
+  <arg name="enable_safety_throttle_logger" default="true"/>
+  <arg name="safety_throttle_debug_csv" default="$(env HOME)/catkin_arena/safety_throttle_debug.csv"/>
 
   <!-- Path visualization -->
   <arg name="viz_path" default="true"/>
@@ -163,11 +175,44 @@
   <!-- move_base plan manager: which provide basic global planner and cost map -->
   <include file="$(find arena_bringup)/launch/sublaunch_testing/move_base/move_base_$(arg local_planner).launch">
     <arg name="model" value="$(arg model)"/>
-    <arg name="cmd_vel_topic" value="/nav_vel" if="$(arg emergency_brake)" />
+    <arg name="cmd_vel_topic" value="/sderi/cmd_vel_raw" if="$(eval arg('enable_safety_throttle') == 'true')" />
+    <arg name="cmd_vel_topic" value="/nav_vel" if="$(eval arg('enable_safety_throttle') != 'true' and arg('emergency_brake') == 'true')" />
     <arg name="agent_name" value="$(arg agent_name)" if="$(eval arg('local_planner') == 'rosnav')" />
     <arg name="trainings_environment" value="$(arg trainings_environment)" if="$(eval arg('local_planner') == 'rosnav')" />
     <!-- <arg name="speed" value="$(param speed)"/> -->
   </include>
+
+  <group if="$(arg enable_safety_throttle)">
+    <node pkg="zjr_planner"
+          type="safety_throttle_node.py"
+          name="safety_throttle_node"
+          output="screen"
+          respawn="false">
+      <param name="enabled" value="true"/>
+      <param name="cmd_vel_in" value="/sderi/cmd_vel_raw"/>
+      <param name="cmd_vel_out" value="/cmd_vel"/>
+      <param name="scan_topic" value="/scan"/>
+      <param name="decision_debug_topic" value="/sderi/decision_debug"/>
+      <param name="debug_topic" value="/sderi/safety_throttle_debug"/>
+      <param name="front_angle_deg" value="$(arg safety_front_angle_deg)"/>
+      <param name="d_stop" value="$(arg safety_d_stop)"/>
+      <param name="d_slow" value="$(arg safety_d_slow)"/>
+      <param name="eri_stop_gain" value="$(arg safety_eri_stop_gain)"/>
+      <param name="eri_slow_gain" value="$(arg safety_eri_slow_gain)"/>
+      <param name="max_linear_scale" value="$(arg safety_max_linear_scale)"/>
+      <param name="keep_reverse" value="$(arg safety_keep_reverse)"/>
+      <param name="angular_limit" value="$(arg safety_angular_limit)"/>
+    </node>
+
+    <group if="$(arg enable_safety_throttle_logger)">
+      <node pkg="zjr_planner"
+            type="safety_throttle_debug_logger.py"
+            name="safety_throttle_debug_logger"
+            output="screen"
+            respawn="false"
+            args="--out $(arg safety_throttle_debug_csv)" />
+    </group>
+  </group>
 
   <!-- <include file="$(find arena_bringup)/launch/sublaunch_testing/plan_manager.launch">
     <arg name="train_mode" value="$(arg train_mode)"/>
