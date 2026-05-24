@@ -22,6 +22,7 @@ OUTPUT_NAME="${OUTPUT_NAME:-}"
 ENABLE_ZJR="${ENABLE_ZJR:-false}"
 ZJR_LAUNCH_DELAY="${ZJR_LAUNCH_DELAY:-20}"
 ZJR_EXTRA_ARGS="${ZJR_EXTRA_ARGS:-}"
+ARENA_EXTRA_ARGS="${ARENA_EXTRA_ARGS:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -42,6 +43,7 @@ Environment variables:
   ENABLE_ZJR        default: false. true/1/yes starts zjr_planner action_server.launch for each chunk.
   ZJR_LAUNCH_DELAY  default: 20. Seconds to wait after arena launch before starting zjr_planner.
   ZJR_EXTRA_ARGS    default: empty. Extra roslaunch args for zjr_planner, for example 'foo:=bar'.
+  ARENA_EXTRA_ARGS  default: empty. Extra roslaunch args for arena_bringup, for example 'enable_safety_throttle:=true'.
 USAGE
 }
 
@@ -234,7 +236,8 @@ run_chunk() {
     world:="$WORLD" \
     task_mode:=scenario \
     scenario_file:="$SCENARIO_FILE" \
-    record_data:=true > "$arena_logfile" 2>&1 &
+    record_data:=true \
+    $ARENA_EXTRA_ARGS > "$arena_logfile" 2>&1 &
 
   local arena_pid="$!"
   sleep 20
@@ -293,6 +296,7 @@ main() {
 
   echo "[CONFIG] planner=$PLANNER world=$WORLD scenario=$SCENARIO_FILE"
   echo "[CONFIG] enable_zjr=$ENABLE_ZJR zjr_launch_delay=$ZJR_LAUNCH_DELAY zjr_extra_args=$ZJR_EXTRA_ARGS"
+  echo "[CONFIG] arena_extra_args=$ARENA_EXTRA_ARGS"
   echo "[CONFIG] run_count=$RUN_COUNT target=$TARGET_EPISODES chunk=$CHUNK_EPISODES data=$DATA_ROOT process=$PROCESS_ROOT"
   echo "[CONFIG] merged output=$PROCESS_ROOT/$OUTPUT_NAME"
 
