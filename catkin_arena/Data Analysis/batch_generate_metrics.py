@@ -137,6 +137,103 @@ def parse_odom_cell(cell):
         pass
     return {}
 
+
+SAFETY_SUMMARY_COLUMNS = [
+    "safety_pass_ratio",
+    "safety_slow_ratio",
+    "safety_stop_ratio",
+    "mean_linear_ratio",
+    "mean_angular_ratio",
+    "angular_intervention_ratio",
+    "reverse_request_ratio",
+    "reverse_allowed_ratio",
+    "max_continuous_slow_duration",
+    "max_continuous_stop_duration",
+    "front_center_min_mean",
+    "left_turn_min_mean",
+    "right_turn_min_mean",
+    "rear_min_mean",
+]
+
+
+def parse_float_scalar(value):
+    try:
+        if value is None or pd.isna(value):
+            return np.nan
+    except Exception:
+        if value is None:
+            return np.nan
+    s = str(value).strip()
+    if s == "":
+        return np.nan
+    try:
+        return float(s)
+    except Exception:
+        return np.nan
+
+
+def parse_bool_scalar(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def finite_mean_from_df(df, col, fallback_col=None):
+    src_col = col if col in df.columns else fallback_col
+    if src_col is None or src_col not in df.columns:
+        return np.nan
+    vals = [parse_float_scalar(v) for v in df[src_col].tolist()]
+    vals = [v for v in vals if np.isfinite(v)]
+    if len(vals) == 0:
+        return np.nan
+    return float(np.mean(vals))
+
+
+def finite_max_from_df(df, col):
+    if col not in df.columns:
+        return 0.0
+    vals = [parse_float_scalar(v) for v in df[col].tolist()]
+    vals = [v for v in vals if np.isfinite(v)]
+    if len(vals) == 0:
+        return 0.0
+    return float(np.max(vals))
+
+
+def ratio_from_df(df, predicate):
+    if len(df) == 0:
+        return np.nan
+    return float(sum(1 for _, row in df.iterrows() if predicate(row))) / float(len(df))
+
+
+def safety_front_state(row):
+    mode = str(row.get("safety_mode", "")).strip()
+    if mode == "passthrough":
+        return "pass"
+    state = row.get("front_state", row.get("state", ""))
+    return str(state).strip()
+
+
+def summarize_safety_debug_episode(df):
+    if df is None or len(df) == 0:
+        return {col: np.nan for col in SAFETY_SUMMARY_COLUMNS}
+
+    return {
+        "safety_pass_ratio": ratio_from_df(df, lambda r: safety_front_state(r) == "pass"),
+        "safety_slow_ratio": ratio_from_df(df, lambda r: safety_front_state(r) == "slow"),
+        "safety_stop_ratio": ratio_from_df(df, lambda r: safety_front_state(r) == "stop"),
+        "mean_linear_ratio": finite_mean_from_df(df, "linear_ratio", "throttle_ratio"),
+        "mean_angular_ratio": finite_mean_from_df(df, "angular_ratio"),
+        "angular_intervention_ratio": ratio_from_df(df, lambda r: parse_bool_scalar(r.get("angular_intervened", False))),
+        "reverse_request_ratio": ratio_from_df(df, lambda r: parse_bool_scalar(r.get("reverse_requested", False))),
+        "reverse_allowed_ratio": ratio_from_df(df, lambda r: parse_bool_scalar(r.get("reverse_allowed", False))),
+        "max_continuous_slow_duration": finite_max_from_df(df, "continuous_slow_duration"),
+        "max_continuous_stop_duration": finite_max_from_df(df, "continuous_stop_duration"),
+        "front_center_min_mean": finite_mean_from_df(df, "front_center_min", "front_min"),
+        "left_turn_min_mean": finite_mean_from_df(df, "left_turn_min"),
+        "right_turn_min_mean": finite_mean_from_df(df, "right_turn_min"),
+        "rear_min_mean": finite_mean_from_df(df, "rear_min"),
+    }
+
 # ---------- 常量 / 枚举 ----------
 class Action:
     STOP = "STOP"
@@ -230,6 +327,25 @@ class MetricsGenerator:
             self.data = data
         except Exception as e:
             raise RuntimeError(f"concat data failed: {e}")
+
+        self.safety_by_episode = {}
+        safety_csv = f / "safety_throttle_debug.csv"
+        if safety_csv.exists():
+            try:
+                safety_df = pd.read_csv(safety_csv, low_memory=False)
+                if "episode" in safety_df.columns:
+                    for ep, ep_df in safety_df.groupby("episode"):
+                        try:
+                            ep_key = int(float(ep))
+                        except Exception:
+                            continue
+                        self.safety_by_episode[ep_key] = summarize_safety_debug_episode(ep_df)
+                    print(f"[INFO] loaded safety throttle debug summaries from {safety_csv}")
+                else:
+                    self.safety_by_episode[0] = summarize_safety_debug_episode(safety_df)
+                    print(f"[WARN] {safety_csv} has no episode column; treating it as episode 0")
+            except Exception as e:
+                print(f"[WARN] read safety_throttle_debug.csv failed: {e}")
 
     def generate_metrics(self):
         episode_data = {}
@@ -353,7 +469,7 @@ class MetricsGenerator:
         if self.debug:
             print(f"[DEBUG] {self.folder} episode {index} PATH LENGTH {path_length}")
 
-        return {
+        result = {
             "curvature": MetricsGenerator.round_values(curvature),
             "normalized_curvature": MetricsGenerator.round_values(normalized_curvature),
             "roughness": MetricsGenerator.round_values(roughness),
@@ -419,6 +535,10 @@ class MetricsGenerator:
             "first_collision_progress": first_collision_progress,
             "first_collision_dist_to_goal": first_collision_dist_to_goal,
         }
+        result.update(self.safety_by_episode.get(index, {
+            col: np.nan for col in SAFETY_SUMMARY_COLUMNS
+        }))
+        return result
 
     def get_mean_position(self, episode, key):
         positions = episode[key].to_list()

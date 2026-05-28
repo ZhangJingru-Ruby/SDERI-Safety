@@ -75,12 +75,18 @@ def ratio(rows, predicate):
     return sum(1 for row in rows if predicate(row)) / float(len(rows))
 
 
+def front_state(row):
+    if str(row.get("safety_mode", "")).strip() == "passthrough":
+        return "pass"
+    return str(row.get("front_state", row.get("state", ""))).strip()
+
+
 def summarize_episode(episode_id, rows):
     return {
         "episode": episode_id,
-        "safety_pass_ratio": ratio(rows, lambda r: r.get("front_state", r.get("state", "")) == "pass"),
-        "safety_slow_ratio": ratio(rows, lambda r: r.get("front_state", r.get("state", "")) == "slow"),
-        "safety_stop_ratio": ratio(rows, lambda r: r.get("front_state", r.get("state", "")) == "stop"),
+        "safety_pass_ratio": ratio(rows, lambda r: front_state(r) == "pass"),
+        "safety_slow_ratio": ratio(rows, lambda r: front_state(r) == "slow"),
+        "safety_stop_ratio": ratio(rows, lambda r: front_state(r) == "stop"),
         "mean_linear_ratio": finite_mean(rows, "linear_ratio"),
         "mean_angular_ratio": finite_mean(rows, "angular_ratio"),
         "angular_intervention_ratio": ratio(rows, lambda r: to_bool(r.get("angular_intervened", False))),

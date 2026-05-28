@@ -78,7 +78,7 @@
   <arg name="safety_rear_end_deg" default="-150"/>
   <arg name="safety_eri_stop_gain" default="0.0"/>
   <arg name="safety_eri_slow_gain" default="0.0"/>
-  <arg name="enable_safety_throttle_logger" default="true"/>
+  <arg name="enable_safety_throttle_logger" default="false"/>
   <arg name="safety_throttle_debug_csv" default="$(env HOME)/catkin_arena/safety_throttle_debug.csv"/>
 
   <!-- Path visualization -->

@@ -30,6 +30,7 @@ REQUIRED_FILES = [
 ]
 
 CSV_FILES = ["cmd_vel.csv", "episode.csv", "odom.csv", "scan.csv", "start_goal.csv"]
+OPTIONAL_EPISODE_CSV_FILES = ["safety_throttle_debug.csv"]
 
 
 def read_csv(path: Path) -> tuple[list[str], list[list[str]]]:
@@ -134,6 +135,38 @@ def copy_filtered_csv(
     return len(out_rows)
 
 
+def copy_filtered_episode_csv(
+    src: Path,
+    dst: Path,
+    ep_map: dict[int, int],
+) -> int:
+    header, rows = read_csv(src)
+    if not header:
+        write_csv(dst, header, [])
+        return 0
+    if "episode" not in header:
+        raise ValueError(f"{src} has no episode column")
+
+    ep_col = header.index("episode")
+    out_rows = []
+    for row in rows:
+        row = list(row)
+        if ep_col >= len(row):
+            continue
+        old_ep = parse_episode(row[ep_col])
+        if old_ep not in ep_map:
+            continue
+        row[ep_col] = str(ep_map[old_ep])
+        out_rows.append(row)
+
+    if dst.exists():
+        _, existing_rows = read_csv(dst)
+        out_rows = existing_rows + out_rows
+
+    write_csv(dst, header, out_rows)
+    return len(out_rows)
+
+
 def merge_chunks(
     chunks: list[Path],
     output: Path,
@@ -188,6 +221,11 @@ def merge_chunks(
 
         for name in CSV_FILES:
             copy_filtered_csv(chunk / name, output / name, row_indices, ep_map)
+
+        for name in OPTIONAL_EPISODE_CSV_FILES:
+            optional_src = chunk / name
+            if optional_src.exists():
+                copy_filtered_episode_csv(optional_src, output / name, ep_map)
 
         if next_episode == 0:
             shutil.copy2(chunk / "params.yaml", output / "params.yaml")

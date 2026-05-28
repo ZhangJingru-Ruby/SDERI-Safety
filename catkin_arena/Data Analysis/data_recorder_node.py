@@ -3,17 +3,54 @@
 import os
 import csv
 import time
+import json
 import rospy
 import rospkg
 import yaml
 from datetime import datetime
-from std_msgs.msg import Int16
+from std_msgs.msg import Int16, String
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 from rosgraph_msgs.msg import Clock
 from tf.transformations import euler_from_quaternion
 import math
+
+
+SAFETY_DEBUG_COLUMNS = [
+    "stamp",
+    "state",
+    "front_min",
+    "scan_stamp",
+    "eri_rule",
+    "d_stop_eff",
+    "d_slow_eff",
+    "throttle_ratio",
+    "nominal_linear_x",
+    "nominal_angular_z",
+    "safe_linear_x",
+    "safe_angular_z",
+    "safety_mode",
+    "front_center_min",
+    "left_turn_min",
+    "right_turn_min",
+    "rear_min",
+    "linear_ratio",
+    "angular_ratio",
+    "reverse_ratio",
+    "front_state",
+    "turn_state",
+    "reverse_state",
+    "linear_intervened",
+    "angular_intervened",
+    "reverse_requested",
+    "reverse_allowed",
+    "turn_direction",
+    "intervention_reason",
+    "continuous_slow_duration",
+    "continuous_stop_duration",
+    "scan_age",
+]
 
 class DataCollector:
     def __init__(self, topic_name, label, msg_type):
@@ -80,16 +117,33 @@ class Recorder:
 
         self.write_data("episode", ["time", "episode"], mode="w")
         self.write_data("start_goal", ["episode", "start", "goal"], mode="w")
+        self.write_data("safety_throttle_debug", ["time", "episode"] + SAFETY_DEBUG_COLUMNS, mode="w")
 
         self.current_episode = 0
         self.config = self.read_config()
         self.current_time = None
+        self.latest_safety_debug = None
 
         self.clock_sub = rospy.Subscriber("/clock", Clock, self.clock_callback)
         self.scenario_reset_sub = rospy.Subscriber("/scenario_reset", Int16, self.scenario_reset_callback)
+        self.safety_debug_topic = rospy.get_param("~safety_throttle_debug_topic", "/sderi/safety_throttle_debug")
+        self.safety_debug_sub = rospy.Subscriber(
+            self.safety_debug_topic,
+            String,
+            self.safety_debug_callback,
+            queue_size=100,
+        )
 
     def scenario_reset_callback(self, data: Int16):
         self.current_episode = data.data
+
+    def safety_debug_callback(self, msg: String):
+        try:
+            payload = json.loads(msg.data)
+            if isinstance(payload, dict):
+                self.latest_safety_debug = payload
+        except Exception:
+            return
 
     def clock_callback(self, clock: Clock):
         current_simulation_time = clock.clock.secs * 1e9 + clock.clock.nsecs
@@ -112,6 +166,13 @@ class Recorder:
             rospy.get_param(rospy.get_namespace() + "start", [0, 0, 0]),
             rospy.get_param(rospy.get_namespace() + "goal", [0, 0, 0])
         ])
+
+        if self.latest_safety_debug is not None:
+            row = [self.current_time, self.current_episode]
+            for col in SAFETY_DEBUG_COLUMNS:
+                value = self.latest_safety_debug.get(col, "")
+                row.append("" if value is None else value)
+            self.write_data("safety_throttle_debug", row)
 
     def read_config(self):
         with open(os.path.join(self.dir, "data_recorder_config.yaml")) as f:
