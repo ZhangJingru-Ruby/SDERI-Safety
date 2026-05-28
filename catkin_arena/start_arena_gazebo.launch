@@ -52,14 +52,32 @@
   <arg name="enable_safety_throttle" default="false"/>
   <arg name="timeout" default="3.0"/>
 
-  <arg name="safety_front_angle_deg" default="60"/>
-  <arg name="safety_d_stop" default="0.35"/>
-  <arg name="safety_d_slow" default="0.90"/>
-  <arg name="safety_eri_stop_gain" default="0.20"/>
-  <arg name="safety_eri_slow_gain" default="0.40"/>
-  <arg name="safety_max_linear_scale" default="1.0"/>
-  <arg name="safety_keep_reverse" default="false"/>
-  <arg name="safety_angular_limit" default="0.0"/>
+  <!-- Safety governor presets:
+       P0 smoke: enable_safety_throttle:=true safety_mode:=passthrough safety_eri_stop_gain:=0.0 safety_eri_slow_gain:=0.0
+       P1 linear: enable_safety_throttle:=true safety_mode:=linear_only safety_d_stop_forward:=0.30 safety_d_slow_forward:=0.60 safety_eri_stop_gain:=0.0 safety_eri_slow_gain:=0.0
+       P2 turn:   enable_safety_throttle:=true safety_mode:=turn_aware safety_d_stop_forward:=0.30 safety_d_slow_forward:=0.60 safety_d_stop_turn:=0.25 safety_d_slow_turn:=0.45 safety_omega_front_slow_cap:=0.40 safety_omega_front_stop_cap:=0.20 safety_eri_stop_gain:=0.0 safety_eri_slow_gain:=0.0
+  -->
+  <arg name="safety_mode" default="linear_only"/>
+  <arg name="safety_allow_safe_reverse" default="false"/>
+  <arg name="safety_d_stop_forward" default="0.35"/>
+  <arg name="safety_d_slow_forward" default="0.90"/>
+  <arg name="safety_d_stop_turn" default="0.25"/>
+  <arg name="safety_d_slow_turn" default="0.45"/>
+  <arg name="safety_omega_front_slow_cap" default="0.40"/>
+  <arg name="safety_omega_front_stop_cap" default="0.20"/>
+  <arg name="safety_max_reverse_speed" default="0.20"/>
+  <arg name="safety_d_stop_reverse" default="0.30"/>
+  <arg name="safety_d_slow_reverse" default="0.50"/>
+  <arg name="safety_front_center_start_deg" default="-30"/>
+  <arg name="safety_front_center_end_deg" default="30"/>
+  <arg name="safety_left_turn_start_deg" default="15"/>
+  <arg name="safety_left_turn_end_deg" default="100"/>
+  <arg name="safety_right_turn_start_deg" default="-100"/>
+  <arg name="safety_right_turn_end_deg" default="-15"/>
+  <arg name="safety_rear_start_deg" default="150"/>
+  <arg name="safety_rear_end_deg" default="-150"/>
+  <arg name="safety_eri_stop_gain" default="0.0"/>
+  <arg name="safety_eri_slow_gain" default="0.0"/>
   <arg name="enable_safety_throttle_logger" default="true"/>
   <arg name="safety_throttle_debug_csv" default="$(env HOME)/catkin_arena/safety_throttle_debug.csv"/>
 
@@ -203,14 +221,27 @@
       <param name="scan_topic" value="/scan"/>
       <param name="decision_debug_topic" value="/sderi/decision_debug"/>
       <param name="debug_topic" value="/sderi/safety_throttle_debug"/>
-      <param name="front_angle_deg" value="$(arg safety_front_angle_deg)"/>
-      <param name="d_stop" value="$(arg safety_d_stop)"/>
-      <param name="d_slow" value="$(arg safety_d_slow)"/>
+      <param name="safety_mode" value="$(arg safety_mode)"/>
+      <param name="allow_safe_reverse" value="$(arg safety_allow_safe_reverse)"/>
+      <param name="d_stop_forward" value="$(arg safety_d_stop_forward)"/>
+      <param name="d_slow_forward" value="$(arg safety_d_slow_forward)"/>
+      <param name="d_stop_turn" value="$(arg safety_d_stop_turn)"/>
+      <param name="d_slow_turn" value="$(arg safety_d_slow_turn)"/>
+      <param name="omega_front_slow_cap" value="$(arg safety_omega_front_slow_cap)"/>
+      <param name="omega_front_stop_cap" value="$(arg safety_omega_front_stop_cap)"/>
+      <param name="max_reverse_speed" value="$(arg safety_max_reverse_speed)"/>
+      <param name="d_stop_reverse" value="$(arg safety_d_stop_reverse)"/>
+      <param name="d_slow_reverse" value="$(arg safety_d_slow_reverse)"/>
+      <param name="front_center_start_deg" value="$(arg safety_front_center_start_deg)"/>
+      <param name="front_center_end_deg" value="$(arg safety_front_center_end_deg)"/>
+      <param name="left_turn_start_deg" value="$(arg safety_left_turn_start_deg)"/>
+      <param name="left_turn_end_deg" value="$(arg safety_left_turn_end_deg)"/>
+      <param name="right_turn_start_deg" value="$(arg safety_right_turn_start_deg)"/>
+      <param name="right_turn_end_deg" value="$(arg safety_right_turn_end_deg)"/>
+      <param name="rear_start_deg" value="$(arg safety_rear_start_deg)"/>
+      <param name="rear_end_deg" value="$(arg safety_rear_end_deg)"/>
       <param name="eri_stop_gain" value="$(arg safety_eri_stop_gain)"/>
       <param name="eri_slow_gain" value="$(arg safety_eri_slow_gain)"/>
-      <param name="max_linear_scale" value="$(arg safety_max_linear_scale)"/>
-      <param name="keep_reverse" value="$(arg safety_keep_reverse)"/>
-      <param name="angular_limit" value="$(arg safety_angular_limit)"/>
     </node>
 
     <group if="$(arg enable_safety_throttle_logger)">
